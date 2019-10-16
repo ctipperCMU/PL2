@@ -42,6 +42,10 @@ public class ParseMATHia {
 
     private static Set<String> badIds = new TreeSet<String>();
 
+    // Keep track of skill mappings:
+    // key: (section, problem, goal)-tuple, value: skill
+    private static Map<String, String> skillMap = new HashMap<String, String>();
+
     public static void main(String[] args) {
 
         for (int i = 0; i < args.length; i++) {
@@ -202,9 +206,6 @@ public class ParseMATHia {
         return reader.getLinesRead();
     }
 
-    private static final String COMMA = ",";
-    private static final String EMPTY_STRING = "";
-
     /**
      * Read the first line (assumed to be headers) and create a map of names to indices.
      * @param String[] headers
@@ -268,11 +269,14 @@ public class ParseMATHia {
         result.setOutcome(parseOutcome(outcome));
         result.setStudentResponseType(parseStudentResponseType(action));
         result.setMathiaSkill(st[colIndexMap.get(SKILL_ID)]);
+        result.setMathiaNewSkill(computeMathiaNewSkill(st, colIndexMap));
         result.setRuleId(st[colIndexMap.get(RULE_ID)]);
         result.setSkillPreviousPKnown(getPKnown(st[colIndexMap.get(SKILL_PREV_P_KNOWN)]));
         result.setSkillNewPKnown(getPKnown(st[colIndexMap.get(SKILL_NEW_P_KNOWN)]));
         result.setSectionProgressStatus(st[colIndexMap.get(SECTION_PROGRESS_STATUS)]);
-        result.setSchoolId(st[colIndexMap.get(SCHOOL_ID)]);
+        if (colIndexMap.get(SCHOOL_ID) != null) {
+            result.setSchoolId(st[colIndexMap.get(SCHOOL_ID)]);
+        }
         result.setAttemptAtStep(st[colIndexMap.get(ATTEMPT)]);
         result.setHelpLevel(st[colIndexMap.get(HELP_LEVEL)]);
 
@@ -357,7 +361,37 @@ public class ParseMATHia {
             return "HINT_REQUEST";
         }
     }
-    
+
+    /**
+     * Determine if an untagged transaction should be tagged with current skill.
+     * @param in String[] the input line
+     * @param colIndexMap map of column names to indices
+     * @return String the skill, empty string if not tagged
+     */
+    private static String computeMathiaNewSkill(String[] in, Map<String, Integer> colIndexMap) {
+
+        String result = "";
+
+        String existingSkill = in[colIndexMap.get(SKILL_ID)];
+
+        StringBuffer sb = new StringBuffer();
+        sb.append(in[colIndexMap.get(SECTION_NAME)]).append("_");
+        sb.append(in[colIndexMap.get(PROBLEM_ID)]).append("_");
+        sb.append(in[colIndexMap.get(GOAL_NODE_ID)]);
+        String key = sb.toString();
+
+        String hashedSkill = skillMap.get(key);
+
+        if ((existingSkill != null) && (!existingSkill.trim().equals(""))) {
+            result = existingSkill;
+            skillMap.put(key, existingSkill);
+        } else if (hashedSkill != null) {
+            result = hashedSkill;
+        }
+        
+        return result;
+    }
+
     /**
      * Convert String p-known values to Double, allowing for
      * empty, null or "NA" cases.
@@ -437,9 +471,11 @@ public class ParseMATHia {
             FileWriter fw = new FileWriter(outputFile, true);
             bw = new BufferedWriter(fw);
 
+            int count = 1;
             for (DataShopTxnData o : outputLines) {
                 bw.write(formatOutput(o));
                 bw.write(NEW_LINE);
+                count++;
             }
 
             bw.close();
@@ -474,6 +510,7 @@ public class ParseMATHia {
         }
         sb.append("Outcome").append(TAB);
         sb.append("KC Model(MATHia)").append(TAB);
+        sb.append("KC Model(MATHia New)").append(TAB);
         sb.append("CF (ruleid)").append(TAB);
         sb.append("CF (Skill Previous p-Known)").append(TAB);
         sb.append("CF (Skill New p-Known)").append(TAB);
@@ -503,6 +540,7 @@ public class ParseMATHia {
         }
         sb.append(output.getOutcome()).append(TAB);
         sb.append(output.getMathiaSkill()).append(TAB);
+        sb.append(output.getMathiaNewSkill()).append(TAB);        
         sb.append(output.getRuleId()).append(TAB);
         sb.append(output.getSkillPreviousPKnown()).append(TAB);
         sb.append(output.getSkillNewPKnown()).append(TAB);
@@ -560,6 +598,7 @@ public class ParseMATHia {
         private String studentResponseType;
         private String tutorResponseType;
         private String mathiaSkill;
+        private String mathiaNewSkill;
         private String ruleId;
         private Double skillPreviousPKnown;
         private Double skillNewPKnown;
@@ -598,6 +637,8 @@ public class ParseMATHia {
         public void setTutorResponseType(String tutorResponseType) { this.tutorResponseType = tutorResponseType; }
         public String getMathiaSkill() { return mathiaSkill; }
         public void setMathiaSkill(String mathiaSkill) { this.mathiaSkill = mathiaSkill; }
+        public String getMathiaNewSkill() { return mathiaNewSkill; }
+        public void setMathiaNewSkill(String mathiaNewSkill) { this.mathiaNewSkill = mathiaNewSkill; }
         public String getRuleId() { return ruleId; }
         public void setRuleId(String ruleId) { this.ruleId = ruleId; }
         public Double getSkillPreviousPKnown() { return skillPreviousPKnown; }
@@ -618,6 +659,7 @@ public class ParseMATHia {
             sb.append("Anon Student Id = ").append(getAnonStudentId());
             sb.append(", Session Id = ").append(getSessionId());
             sb.append(", MATHia skillId = ").append(getMathiaSkill());
+            sb.append(", MATHia New skillId = ").append(getMathiaNewSkill());
             sb.append(", Transaction Time = ").append(getTransactionTime());
             sb.append(", Level (Assignment) = ").append(getAssignmentLevel());
             sb.append(", Level (Section) = ").append(getSectionLevel());
